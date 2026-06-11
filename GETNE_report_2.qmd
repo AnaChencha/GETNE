@@ -1,0 +1,697 @@
+---
+title: "GETNE analysis"
+date: today
+format: 
+  html:
+    fontsize: medium
+    embed-resources: true
+    html-table-processing: none
+    self-contained-math: true
+    toc: true
+    toc-title: Contents
+execute:
+  echo: false
+  warning: false
+  editor_options:
+    chunk_output_type: console
+---
+
+Elaborado por: Ana Elsa Huerta Hernández
+
+```{r}
+#| label: load-packages
+#| include: false
+
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(gtsummary)
+library(broom)
+library(car)
+library(rstatix)
+library(ggpubr)
+library(cutpointr)
+library(here)
+
+GETNE <- read_xlsx(
+  here("Datasets", "Datasets_report.xlsx"), 
+  sheet = "GETNE_DB", col_names = TRUE)
+
+GETNE_control <- read_xlsx(
+  here("Datasets", "Datasets_report.xlsx"), 
+  sheet = "GETNE_control", col_names = TRUE)
+
+GETNE_wide <- read_xlsx(
+  here("Datasets", "Datasets_report.xlsx"), 
+  sheet = "GETNE_wide", col_names = TRUE)
+
+GETNE_wide_filter <- GETNE_wide %>% 
+  filter(Cardiopatia_alDx == "No") %>% 
+  mutate(moment = factor(moment, levels = c("BASAL", "Dx_Cardiopatia", "CONTROL"),
+                         labels = c("Basal", "Dx Cardiopatia", "Control post Cardiopatia")))
+```
+
+# Tablas resumen
+
+## Cardiopatia vs no cardiopatia
+
+En estas tablas están incluidos todos los pacientes, los que presentaban cardiopatía al diagnóstico o la desarrollaron en algún momento y los que no desarrollaron cardiopatía. Las comparaciones de variables continuas en estas tablas se hacen por vía no paramétrica. 
+
+```{r}
+#| label: tbl-GETNE-todos-categoricas
+#| tbl-cap: Parámetros categóricos, comparación cardiopatía si vs no
+
+Tabla_GETNE_categorical <- GETNE %>% 
+  select(HOSPITAL, Sexo, Edad, Estado_general, Cardiopatia_alDx, Localizacion_primario, Metastasis_hepaticas,
+         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Cromogranina_A_categ,
+         Cardiopatia_carcinoide, CX_VALVULAR,
+         Tratamiento_sistemico_recibido) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical"),
+              missing = "no") %>% 
+  add_p() 
+Tabla_GETNE_categorical
+```
+
+
+Para las siguientes variables del TAC, en la comparación de cardiopatía si vs no: en los pacientes que presentaron cardiopatía carcinoide al inicio, se tomó en cuenta el TAC basal que es el de la cardiopatía y en los pacientes que presentaron cardiopatía carcinoide a posteriori, se tomó en cuenta los datos del TAC de diagnóstico de la cardiopatía. 
+
+En los pacientes que nunca desarrollaron cardiopatía, se tomó en cuenta el TAC basal. 
+
+
+```{r}
+#| label: tbl-GETNE-todos-continuas
+#| tbl-cap: Parámetros TAC, comparación cardiopatía si vs no
+
+Tabla_GETNE_TAC <- GETNE %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide, levels = c("Si", "No"))) %>% 
+  select(Diametro_AD_TAC_Cardiopatia, Diametro_AI_TAC_Cardiopatia, Diametro_VD_TAC_Cardiopatia, Diametro_VI_TAC_Cardiopatia,
+         RATIO_AD_AI_TAC_Cardiopatia, RATIO_VD_VI_TAC_Cardiopatia, Cardiopatia_carcinoide) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical"),
+              missing = "no") %>% 
+  add_difference() 
+Tabla_GETNE_TAC
+```
+
+```{r}
+#| label: tbl-GETNE-todos-inclinacionsepto
+#| tbl-cap: Inclinación septo ventricular, cardiopatía si vs no
+
+Tabla_inclinacion_SEPTO <- GETNE %>% 
+  select(Inclinacion_septo_ventricular, 
+         Cardiopatia_carcinoide) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical"),
+              missing = "no") %>% 
+  add_p() 
+Tabla_inclinacion_SEPTO
+```
+
+
+## Cardiopatia_postDX vs no cardiopatia
+
+En la siguientes tablas se incluye la comparación entre aquellos pacientes que desarrollaron cardiopatía a posteriori del diagnóstico vs los que no desarrollaron cardiopatía en ningún momento. Las comparaciones de variables continuas en estas tablas se hacen por vía no paramétrica. 
+
+```{r}
+#| label: tbl-GETNE-CCpost-categoricas
+#| tbl-cap: Parámetros categóricos, comparación cardiopatía si (post-Dx) vs no
+
+Tabla_GETNE_cardiopatia <- GETNE %>% 
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
+  select(HOSPITAL, Sexo, Edad, Estado_general, Cardiopatia_alDx, Localizacion_primario, Metastasis_hepaticas,
+         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Cromogranina_A_categ,
+         Cardiopatia_carcinoide, CX_VALVULAR,
+         Tratamiento_sistemico_recibido) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical"),
+              missing = "no") %>% 
+  add_p() 
+Tabla_GETNE_cardiopatia
+```
+
+```{r}
+#| label: tbl-GETNE-CCpost-TAC
+#| tbl-cap: Parámetros TAC, comparación cardiopatía si (post-Dx) vs no
+
+Tabla_GETNE_TAC2 <- GETNE %>%
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide, levels = c("Si", "No"))) %>% 
+  select(Diametro_AD_TAC_BASAL, Diametro_AI_TAC_BASAL, Diametro_VD_TAC_BASAL, Diametro_VI_TAC_BASAL,
+         RATIO_AD_AI_TAC_BASAL, RATIO_VD_VI_TAC_BASAL, Cardiopatia_carcinoide) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical"),
+              missing = "no") %>% 
+  add_difference()
+Tabla_GETNE_TAC2
+```
+
+```{r}
+#| label: tbl-GETNE-CCpost-inclinacionsepto
+#| tbl-cap: Inclinación septo ventricular, comparación cardiopatía si (post-Dx) vs no
+
+Tabla_GETNE_TAC_inclinacion <- GETNE %>%
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
+  select(Inclinacion_septo_ventricular_TAC_BASAL, 
+         Cardiopatia_carcinoide) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical"),
+              missing = "no") %>% 
+  add_p()
+Tabla_GETNE_TAC_inclinacion 
+```
+
+### Análisis multivariante
+
+Un poco en línea de lo que decía Maria, como se ve abajo, por análisis multivariante las dos variables que siguen apareciendo que pueden ser predictoras de cardiopatía son el Ventrículo izquierdo basal o el ratio VD_VI. En la regresión no es correcto incluir el dato del ventrículo y el ratio porque son variables relacionadas, por eso las he puesto por separado (modelo multivariante 1 con los diámetros y modelo multivariante 2 con los ratios). Para este análisis multivariante incluí la comparación de pacientes sin cardiopatía y pacientes que desarrollaron la cardiopatía a posteriori del diagnóstico y no fue detectada en el TAC basal. 
+
+```{r}
+GETNE_filter <- GETNE %>% 
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide),
+         Inclinacion_septo_ventricular_TAC_BASAL = factor(Inclinacion_septo_ventricular_TAC_BASAL))
+
+Multivariante1 <- glm(Cardiopatia_carcinoide ~ Diametro_VI_TAC_BASAL + Diametro_VD_TAC_BASAL, data = GETNE_filter, family = "binomial")
+
+summary(Multivariante1)
+```
+
+```{r}
+Multivariante2 <- glm(Cardiopatia_carcinoide ~ RATIO_AD_AI_TAC_BASAL + RATIO_VD_VI_TAC_BASAL, data = GETNE_filter, family = "binomial")
+
+summary(Multivariante2)
+```
+
+
+## Cardiopatía post-diagnóstico
+
+Aquí está la mediana de tiempo en meses que pasó entre el TAC basal y el TAC de diagnóstico de la cardiopatía en aquellos que desarrollaron la cardiopatía a posteriori. 
+
+Está en meses, el que menos tardó en desarrollarla fue el paciente número 7 que tardó 17 días entre el TAC basal y el TAC de diagnóstico. El siguiente con menor tiempo tardó dos meses. Pongo una tabla del paciente 7 para ver los datos en específico. 
+
+```{r}
+#| label: tbl-GETNE-paciente7
+#| tbl-cap: Parámetros TAC en distintos tiempos del paciente que tardó menos de un mes en desarrollar la cardiopatía. 
+
+
+tbl_getne_7 <- GETNE_wide_filter %>%
+  select(-Cardiopatia_alDx) %>% 
+  filter(Numero_registro == "7") %>% 
+  tbl_summary(by = moment, type = list(where(is.numeric) ~ "continuous")) 
+tbl_getne_7
+```
+
+ 
+```{r}
+GETNE %>% 
+  filter(Cardiopatia_alDx == "No") %>% 
+  summarize(Median_meses_al_diagnostico = median(Mes_Dx_Basal),
+            min = min(Mes_Dx_Basal),
+            max = max(Mes_Dx_Basal))
+```
+
+
+Aquí está una tabla de todos estos parámetros. Tomando en cuenta que el TAC se realizó en tres tiempos (basal, al diagnóstico y control post diagnóstico), se analizaron las diferencias por anova de medidas repetidas o un test de Friedman, dependiendo si la variable seguía una distribución normal o no. Solo están graficadas aquellas variables cuyo test dio significativo. La n de los pacientes es uno menos, porque uno de los que desarrolló cardiopatía carcinoide posteriori al diagnóstico, tenía un TAC control post diagnóstico anterior al desarrollo de la cardiopatía (Paciente 3: año diagnóstico- 2020; año control - 2021; año disgnóstico de la cardiopatía - 2022).
+
+```{r}
+#| label: tbl-GETNE-CCpost-todoslostiempos
+#| tbl-cap: Parámetros TAC en distintos tiempos en pacientes con cardiopatia
+
+
+tbl_getne_postDX <- GETNE_wide_filter %>%
+  select(-c(Cardiopatia_alDx, Inclinacion_septoventricular)) %>% 
+  tbl_summary(by = moment, include = -Numero_registro, type = list(where(is.numeric) ~ "continuous")) 
+tbl_getne_postDX
+```
+
+```{r}
+#| label: tbl-GETNE-CCpost-todoslostiempos-inclinacionsepto
+#| tbl-cap: Parámetro de septo ventricular en los TAC en distintos tiempos
+
+tbl_getne_controlsepto <- GETNE_wide_filter %>%
+  select(-c(Cardiopatia_alDx)) %>% 
+  select(Numero_registro, moment, Inclinacion_septoventricular) %>% 
+  tbl_summary(by = moment, include = -Numero_registro, type = list(all_dichotomous() ~ "categorical2")) %>% 
+  add_p()
+tbl_getne_controlsepto
+
+```
+
+### Figuras
+
+```{r}
+#| label: fig-Friedman-diametroVD
+#| fig-cap: Evolución Diámetro VD en pacientes con cardiopatía.
+
+
+Friedman_diametro_VD <- GETNE_wide_filter %>% friedman_test(Diametro_VD ~ moment | Numero_registro)
+
+pwc_Diametro_VD <- GETNE_wide_filter %>% 
+  wilcox_test(Diametro_VD ~ moment, paired = TRUE, p.adjust.method = "bonferroni")
+
+pwc_Diametro_VD <- pwc_Diametro_VD %>%  add_y_position()
+
+ggboxplot(GETNE_wide_filter, x= "moment", y= "Diametro_VD", add = "jitter")+
+  stat_pvalue_manual(pwc_Diametro_VD, hide.ns = FALSE) +
+  labs(
+    title = "Evolución Diámetro VD",
+    subtitle = get_test_label(Friedman_diametro_VD, detailed = TRUE),
+    caption = get_pwc_label(pwc_Diametro_VD))+
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title = element_text(size = 18, face = "bold"),
+        axis.text = element_text(size = 14))
+```
+
+
+```{r}
+#| label: fig-Friedman-diametroAD
+#| fig-cap: Evolución Diámetro AD en pacientes con cardiopatía.
+
+Friedman_diametro_AD <- GETNE_wide_filter %>% friedman_test(Diametro_AD ~ moment | Numero_registro)
+
+pwc_Diametro_AD <- GETNE_wide_filter %>% 
+  wilcox_test(Diametro_AD ~ moment, paired = TRUE, p.adjust.method = "bonferroni")
+
+pwc_Diametro_AD <- pwc_Diametro_AD %>%  add_y_position()
+
+ggboxplot(GETNE_wide_filter, x= "moment", y= "Diametro_AD", add = "jitter")+
+  stat_pvalue_manual(pwc_Diametro_AD, hide.ns = FALSE) +
+  labs(
+    title = "Evolución Diámetro AD",
+    subtitle = get_test_label(Friedman_diametro_AD, detailed = TRUE),
+    caption = get_pwc_label(pwc_Diametro_AD))+
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title = element_text(size = 18, face = "bold"),
+        axis.text = element_text(size = 14))
+
+```
+
+```{r}
+#| label: fig-Friedman-diametroVI
+#| fig-cap: Evolución Diámetro VI en pacientes con cardiopatía.
+
+
+Friedman_diametro_VI <- GETNE_wide_filter %>% friedman_test(Diametro_VI ~ moment | Numero_registro)
+
+pwc_Diametro_VI <- GETNE_wide_filter %>% 
+  wilcox_test(Diametro_VI ~ moment, paired = TRUE, p.adjust.method = "bonferroni")
+
+pwc_Diametro_VI <- pwc_Diametro_VI %>%  add_y_position()
+
+ggboxplot(GETNE_wide_filter, x= "moment", y= "Diametro_VI", add = "jitter")+
+  stat_pvalue_manual(pwc_Diametro_VI, hide.ns = FALSE) +
+  labs(
+    title = "Evolución Diámetro VI",
+    subtitle = get_test_label(Friedman_diametro_VI, detailed = TRUE),
+    caption = get_pwc_label(pwc_Diametro_VI))+
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title = element_text(size = 18, face = "bold"),
+        axis.text = element_text(size = 14))
+```
+
+```{r}
+#| label: fig-Friedman-diametroAI
+#| fig-cap: Evolución Diámetro AI en pacientes con cardiopatía.
+
+Friedman_diametro_AI <- GETNE_wide_filter %>% friedman_test(Diametro_AI ~ moment | Numero_registro)
+
+pwc_Diametro_AI <- GETNE_wide_filter %>% 
+  wilcox_test(Diametro_AI ~ moment, paired = TRUE, p.adjust.method = "bonferroni")
+
+pwc_Diametro_AI <- pwc_Diametro_AI %>%  add_y_position()
+
+ggboxplot(GETNE_wide_filter, x= "moment", y= "Diametro_AI", add = "jitter")+
+  stat_pvalue_manual(pwc_Diametro_AI, hide.ns = FALSE) +
+  labs(
+    title = "Evolución Diámetro AI",
+    subtitle = get_test_label(Friedman_diametro_AI, detailed = TRUE),
+    caption = get_pwc_label(pwc_Diametro_AI))+
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title = element_text(size = 18, face = "bold"),
+        axis.text = element_text(size = 14))
+```
+
+
+```{r}
+#| label: fig-Friedman-ratioAD_AI
+#| fig-cap: Evolución RAtio AD_AI en pacientes con cardiopatía.
+
+Friedman_RATIO_AD_AI <- GETNE_wide_filter %>% friedman_test(RATIO_AD_AI ~ moment | Numero_registro)
+
+pwc_RATIO_AD_AI <- GETNE_wide_filter %>% 
+  wilcox_test(RATIO_AD_AI ~ moment, paired = TRUE, p.adjust.method = "bonferroni")
+
+pwc_RATIO_AD_AI <- pwc_RATIO_AD_AI %>%  add_y_position()
+
+ggboxplot(GETNE_wide_filter, x= "moment", y= "RATIO_AD_AI", add = "jitter")+
+  stat_pvalue_manual(pwc_RATIO_AD_AI, hide.ns = FALSE) +
+  labs(
+    title = "Evolución RATIO AD:AI",
+    subtitle = get_test_label(Friedman_diametro_AD, detailed = TRUE),
+    caption = get_pwc_label(pwc_RATIO_AD_AI))+
+      theme(plot.title = element_text(size = 18, face = "bold"),
+            axis.title = element_text(size = 18, face = "bold"),
+            axis.text = element_text(size = 14))
+```
+
+```{r}
+#| label: fig-Friedman-ratioVD_VI
+#| fig-cap: Evolución RAtio VD_VI en pacientes con cardiopatía.
+
+Friedman_RATIO_VD_VI <- GETNE_wide_filter %>% friedman_test(RATIO_VD_VI ~ moment | Numero_registro)
+
+pwc_RATIO_VD_VI <- GETNE_wide_filter %>% 
+  wilcox_test(RATIO_VD_VI ~ moment, paired = TRUE, p.adjust.method = "bonferroni")
+
+pwc_RATIO_VD_VI <- pwc_RATIO_VD_VI %>%  add_y_position()
+
+ggboxplot(GETNE_wide_filter, x= "moment", y= "RATIO_VD_VI", add = "jitter")+
+  stat_pvalue_manual(pwc_RATIO_VD_VI, hide.ns = FALSE) +
+  labs(
+    title = "Evolución RATIO VD:VI",
+    subtitle = get_test_label(Friedman_RATIO_VD_VI, detailed = TRUE),
+    caption = get_pwc_label(pwc_RATIO_VD_VI)) +
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title = element_text(size = 18, face = "bold"),
+        axis.text = element_text(size = 14))
+```
+
+# Cutpoint: diagnóstico
+
+Para proponer un punto de corte nos hemos basado en que en las variables que más encontramos diferencias a nivel basal entre los que desarrollan cardiopatía carcinoide o no son en las mediciones del diámetro del ventrículo izquierdo (Diametro_VI_TAC_BASAL) y en el ratio entre el ventrículo derecho y el izquierdo (RATIO_VD_VI_TAC_BASAL). Entonces para los siguientes análisis, usé el paquete cutpointr de R que te permite usando diferentes métricas encontrar ese punto de corte y establecer la sensibilidad (sensitivity - capacidad de detectar a los enfermos), especificidad (specificity - capacidad de detectar a los sanos) y la exactitud (accuracy-- acc - concordancia entre el valor medido y el verdadero). Lo que nos interesa en una prueba que puede ser un posible cribado para detectar a los enfermos es que el punto de corte que elijamos tenga la mayor sensibilidad posible. 
+
+Para estos análisis hemos incluido solo a los pacientes que desarrollaron cardiopatía carcinoide después del diagnóstico, esto es que en el TAC basal no fue detectada. 
+
+## Diametro VI
+
+```{r}
+
+set.seed(123)
+CP_VI2 <- cutpointr(GETNE_filter, Diametro_VI_TAC_BASAL, Cardiopatia_carcinoide,
+                    boot_runs = 1000, boot_stratify = TRUE,
+                method = maximize_metric, metric = sum_sens_spec, pos_class = "Si")
+
+summary(CP_VI2)
+
+```
+
+**IC del AUC**
+
+```{r}
+boot_ci(CP_VI2, AUC, in_bag = FALSE, alpha = 0.05)
+```
+
+
+**IC95% del optimal cutpoint**
+
+```{r}
+boot_ci(CP_VI2, optimal_cutpoint, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la sensibilidad**
+
+```{r}
+boot_ci(CP_VI2, sensitivity, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la especificidad**
+
+```{r}
+boot_ci(CP_VI2, specificity, in_bag = FALSE, alpha = 0.05)
+```
+
+
+```{r}
+#| label: fig-ROCcurve-DiametroVI
+#| fig-cap: Distribución de acuerdo al punto de corte del diametro del VI y Curva ROC
+
+plot(CP_VI2)
+```
+
+### Subgrupos
+
+En el siguiente análisis he tomado en cuenta la variable Sexo como subgrupo y ya vemos que los puntos de corte cambian y dependiendo si se es hombre o mujer la sensibilidad y la especificidad. Como ya he puesto anteriormente, nuestra N es pequeña y los puntos de corte que hemos puesto no son tan confiables. Es una primera aproximación.
+
+```{r}
+set.seed(123)
+CP_b <- cutpointr(GETNE_filter, Diametro_VI_TAC_BASAL, Cardiopatia_carcinoide, Sexo,
+                                    method = maximize_metric, metric = sum_sens_spec,
+                  boot_runs = 1000, boot_stratify = TRUE, pos_class = "Si")
+
+summary(CP_b)
+
+```
+
+**IC del AUC**
+
+```{r}
+boot_ci(CP_b, AUC, in_bag = FALSE, alpha = 0.05)
+```
+
+
+**IC95% del optimal cutpoint**
+
+```{r}
+boot_ci(CP_b, optimal_cutpoint, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la sensibilidad**
+
+```{r}
+boot_ci(CP_b, sensitivity, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la especificidad**
+
+```{r}
+boot_ci(CP_b, specificity, in_bag = FALSE, alpha = 0.05)
+```
+
+```{r}
+#| label: fig-ROCcurve-DiametroVI-subgrupos
+#| fig-cap: Distribución de acuerdo al punto de corte del diametro del VI y Curva ROC. Tomando en cuenta el sexo como subgrupo. 
+
+plot(CP_b)
+```
+
+
+## Ratio VD_VI
+
+```{r}
+set.seed(123)
+CP2 <- cutpointr(GETNE_filter, RATIO_VD_VI_TAC_BASAL, Cardiopatia_carcinoide,
+                 boot_runs = 1000, boot_stratify = TRUE,
+                method = maximize_metric, metric = sum_sens_spec, pos_class = "Si")
+
+summary(CP2)
+```
+
+**IC del AUC**
+
+```{r}
+boot_ci(CP2, AUC, in_bag = FALSE, alpha = 0.05)
+```
+
+
+**IC95% del optimal cutpoint**
+
+```{r}
+boot_ci(CP2, optimal_cutpoint, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la sensibilidad**
+
+```{r}
+boot_ci(CP2, sensitivity, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la especificidad**
+
+```{r}
+boot_ci(CP2, specificity, in_bag = FALSE, alpha = 0.05)
+```
+
+
+```{r}
+#| label: fig-ROCcurve-RatioVD-VI
+#| fig-cap: Distribución de acuerdo al punto de corte del ratio VD_VI y Curva ROC
+
+plot(CP2)
+```
+
+### Subgrupos
+
+En el siguiente análisis he tomado en cuenta la variable Sexo como subgrupo y ya vemos que los puntos de corte cambian y dependiendo si se es hombre o mujer la sensibilidad y la especificidad. Como ya he puesto anteriormente, nuestra N es pequeña y los puntos de corte que hemos puesto no son tan confiables. Es una primera aproximación.
+
+
+```{r}
+
+set.seed(123)
+CP2_b <- cutpointr(GETNE_filter, RATIO_VD_VI_TAC_BASAL, Cardiopatia_carcinoide, Sexo,
+                                    method = maximize_metric, metric = sum_sens_spec,
+                   boot_runs = 1000, boot_stratify = TRUE, pos_class = "Si")
+
+summary(CP2_b)
+```
+
+```{r}
+#| label: fig-ROCcurve-RatioVD-VI-subgrupos
+#| fig-cap: Distribución de acuerdo al punto de corte del ratio VD_VI y Curva ROC. Tomando en cuenta el sexo como subgrupo. 
+
+plot(CP2_b)
+```
+
+**IC del AUC**
+
+```{r}
+boot_ci(CP2_b, AUC, in_bag = FALSE, alpha = 0.05)
+```
+
+
+**IC95% del optimal cutpoint**
+
+```{r}
+boot_ci(CP2_b, optimal_cutpoint, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la sensibilidad**
+
+```{r}
+boot_ci(CP2_b, sensitivity, in_bag = FALSE, alpha = 0.05)
+```
+
+**IC95% de la especificidad**
+
+```{r}
+boot_ci(CP2_b, specificity, in_bag = FALSE, alpha = 0.05)
+```
+
+## Score combinado
+
+### Modelo 1
+
+Como podemos ver en los resultados anteriores la sensibilidad es del 50% aproximadamente en ambos casos, en el ratio un poco más alta. Esto quiere decir que un 50% de las personas que van a desarrollar cardiopatía carcinoide no las vas a poder pillar antes en el TAC basal. Para mejorar este valor, hemos hecho un score combinado. El score combinado se realiza sacando factores a través de una regresión que da unos factores que te ayudan a generar tu ecuación que siempre va a ser: $\beta$0 (intercepto) + $\beta$1 (variable 1) * factor + $\beta$2 (variable 2) * factor....
+
+A continuación los resultados de la regresión: 
+
+```{r}
+modelo <- glm(Cardiopatia_carcinoide ~ RATIO_VD_VI_TAC_BASAL + Diametro_VI_TAC_BASAL, data = GETNE_filter, family = "binomial")
+
+summary(modelo)
+```
+
+A partir de ahí generamos una nueva variable que incluye la siguiente fórmula: 
+
+-2.63917 + Diametro_VI_TAC_BASAL * -0.08067 + RATIO_VD_VI_TAC_BASAL * 6.53531
+
+Esa nueva variable la usamos para definir el punto de corte y graficar la curva ROC. 
+
+```{r}
+GETNE_filter$variable_combinada <- predict(modelo, type = "link")
+
+set.seed(123)
+CP_variablecombinada <- cutpointr(GETNE_filter, variable_combinada, Cardiopatia_carcinoide,
+                                  boot_runs = 1000, boot_stratify = TRUE,
+                    method = maximize_metric, metric = sum_sens_spec, pos_class = "Si")
+
+summary(CP_variablecombinada)
+```
+
+```{r}
+#| label: fig-ROCcurve-variablecombinada
+#| fig-cap: Distribución de acuerdo al punto de corte de la variable combinada y Curva ROC
+
+plot(CP_variablecombinada)
+```
+
+#### Subgrupos
+
+```{r}
+set.seed(123)
+CP_variablecombinada_b <- cutpointr(GETNE_filter, variable_combinada, Cardiopatia_carcinoide, Sexo,
+                                  method = maximize_metric, metric = sum_sens_spec,
+                                 boot_runs = 1000, boot_stratify = TRUE, pos_class = "Si")
+
+CP_variablecombinada_b %>%  select(subgroup, AUC, optimal_cutpoint, sum_sens_spec, acc, sensitivity, specificity, data)
+
+```
+
+```{r}
+#| label: fig-ROCcurve-variablecombinada-subgrupos
+#| fig-cap: Distribución de acuerdo al punto de corte de la variable combinada y Curva ROC. Tomando en cuenta el sexo.
+
+plot(CP_variablecombinada_b)
+```
+
+Las métricas mejoran un poco, la exactitud y la sensibilidad mejoran. Hay que tomar en cuenta que nuestra N es pequeña. Esto se tendría que validar en una N mayor. La variable sexo biológico si que puede tener interés porque hay estudios que dicen que el corazón entre hombres y mujeres es diferente (PMID: 36352432). 
+
+También una de las variables que han sido diferentes entre los que tienen cardiopatía o no es la inclinación del septo ventricular. El siguiente punto de corte se construyó tomando en cuenta esta variable, pero lo que observamos es que es prácticamente igual que el anterior, no mejora. 
+
+### Modelo 2
+
+```{r}
+modelo2 <- glm(Cardiopatia_carcinoide ~ RATIO_VD_VI_TAC_BASAL + Diametro_VI_TAC_BASAL + Inclinacion_septo_ventricular_TAC_BASAL, data = GETNE_filter, family = "binomial")
+
+summary(modelo2)
+```
+
+A partir de aquí se añade a la ecuación la inclinación del septo ventricular, que incluye la siguiente fórmula: 
+
+-2.23018 + Diametro_VI_TAC_BASAL * -0.07428 + RATIO_VD_VI_TAC_BASAL * 5.68530 + 15.91645 (Septo_si)
+
+
+```{r}
+GETNE_filter$variable_combinada2 <- predict(modelo2, type = "link")
+
+set.seed(123)
+CP_variablecombinada2 <- cutpointr(GETNE_filter, variable_combinada2, Cardiopatia_carcinoide,
+                                   boot_runs = 1000, boot_stratify = TRUE,
+                    method = maximize_metric, metric = sum_sens_spec, pos_class = "Si")
+
+summary(CP_variablecombinada2)
+```
+
+```{r}
+#| label: fig-ROCcurve-variablecombinada2
+#| fig-cap: Distribución de acuerdo al punto de corte de la variable combinada (incluyendo inclinación septo ventricular) y Curva ROC.
+
+plot(CP_variablecombinada2)
+```
+
+#### Subgrupos
+
+```{r}
+set.seed(12)
+
+set.seed(123)
+CP_variablecombinada2_b <- cutpointr(GETNE_filter, variable_combinada2, Cardiopatia_carcinoide, Sexo,
+                                     method = maximize_metric, metric = sum_sens_spec,
+                                  boot_runs = 1000, boot_stratify = TRUE, pos_class = "Si")
+
+CP_variablecombinada2_b %>%  select(subgroup, AUC, optimal_cutpoint, sum_sens_spec, acc, sensitivity, specificity, data)
+```
+
+```{r}
+#| label: fig-ROCcurve-variablecombinada2-subgrupos
+#| fig-cap: Distribución de acuerdo al punto de corte de la variable combinada (incluyendo inclinación septo ventricular) y Curva ROC. Tomando en cuenta el sexo.
+
+plot(CP_variablecombinada2_b)
+```
+
+# Estadística
+
+Se evaluó la normalidad y la hocedasticidad en todas las variables de comparación para saber si el análisis univariante (comparación de cada variable entre grupos) se realizaba por vía paramétrica o no paramétrica (t-student o wilcoxon test no pareado). 
+
+En el análisis multivariado por regresión lineal binomial se incluyeron variables de interés para valorar aquellas que pudieran tener impacto diagnóstico. 
+
+La comparación de los parámetros del TAC en los tres tiempos (Basal, Dx caradiopatía y Control 1 año post-diagnóstico) en aquellos pacientes que desarrollaron cardiopatía a posteriori después del diagnótico inicial se realizó por anova de medidas repetidas o por el test de Friedman, dependiendo de la normalidad de los residuales. 
+
+Para establecer el punto de corte óptimo se usó el paquete cutpointr de R, el cual en base establece el punto de corte que maximiza el índice de Youden. También, tomando en cuenta las diferencias biológicas del corazón entre hombres y mujeres, se usó la variable sexo como subgrupo para establecer puntos de corte diferentes. 
+
+# Conclusiones
+
+-Encontramos diferencias significativas a nivel basal en el diámetro del VI y en el ratio VD:VI entre aquellos pacientes que no desarrollaron cardiopatía y aquellos que la desarrollaron después del diagnóstico y que en el TAC basal no se les detectó. 
+
+-El ratio VD:VI tiene potencial predictor para encontar aquellos pacientes que pudieran desarrollar cardiopatía carcinoide. Es necesario establecer puntos de corte diferentes entre hombres y mujeres. Se necesita de una muestra mayor para poder confirmar estas observaciones y establecer un punto de corte óptimo en ambos sexos. 
+
+-El tratatmiento en los pacientes con cardiopatía carcinoide tiene el efecto esperado en los parámetros del TAC, puesto que se ve claramente que cuando se diagnostica la cardiopatía el diámetro VD, diámetro AD, ratio AD:AI y ratio VD:VI son diferentes entre a los que se observaban a nivel basal y en el TAC control al año del diagnóstico, vuelven a valores basales sin cardiopatía. 
