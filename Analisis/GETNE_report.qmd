@@ -32,17 +32,21 @@ library(rstatix)
 library(ggpubr)
 library(cutpointr)
 library(here)
+library(survival)
+library(lubridate)
+library(ggsurvfit)
+library(survminer)
 
 GETNE <- read_xlsx(
-  here("Datasets", "Datasets_report.xlsx"), 
+  here("Data", "Datasets", "Dataset_report.xlsx"), 
   sheet = "GETNE_DB", col_names = TRUE)
 
 GETNE_control <- read_xlsx(
-  here("Datasets", "Datasets_report.xlsx"), 
+  here("Data", "Datasets", "Dataset_report.xlsx"), 
   sheet = "GETNE_control", col_names = TRUE)
 
 GETNE_wide <- read_xlsx(
-  here("Datasets", "Datasets_report.xlsx"), 
+  here("Data", "Datasets", "Dataset_report.xlsx"), 
   sheet = "GETNE_wide", col_names = TRUE)
 
 GETNE_wide_filter <- GETNE_wide %>% 
@@ -62,15 +66,28 @@ En estas tablas están incluidos todos los pacientes, los que presentaban cardio
 #| tbl-cap: Parámetros categóricos, comparación cardiopatía si vs no
 
 Tabla_GETNE_categorical <- GETNE %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide, levels = c("Si", "No"))) %>% 
   select(HOSPITAL, Sexo, Edad, Estado_general, Cardiopatia_alDx, Localizacion_primario, Metastasis_hepaticas,
-         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Cromogranina_A_categ,
+         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Ki_67_dic, Grado_NET, Cromogranina_A_categ, A5_HIAA,
          Cardiopatia_carcinoide, CX_VALVULAR,
-         Tratamiento_sistemico_recibido) %>% 
+         Tratamiento_oncologico, Exitus_status, OS_years) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
-                                                       all_dichotomous() ~ "categorical"),
-              missing = "no") %>% 
+                                                       all_dichotomous() ~ "categorical")) %>% 
   add_p() 
 Tabla_GETNE_categorical
+```
+
+```{r}
+#| label: tbl-GETNE-continuas
+#| tbl-cap: Parámetros de edad y sexo, comparación cardiopatía si vs no
+
+Tabla_sexoEdad <- GETNE %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide, levels = c("Si", "No"))) %>% 
+  select(Cardiopatia_carcinoide, Sexo, Edad) %>% 
+  tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical")) %>% 
+  add_difference() 
+Tabla_sexoEdad 
 ```
 
 
@@ -88,8 +105,7 @@ Tabla_GETNE_TAC <- GETNE %>%
   select(Diametro_AD_TAC_Cardiopatia, Diametro_AI_TAC_Cardiopatia, Diametro_VD_TAC_Cardiopatia, Diametro_VI_TAC_Cardiopatia,
          RATIO_AD_AI_TAC_Cardiopatia, RATIO_VD_VI_TAC_Cardiopatia, Cardiopatia_carcinoide) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
-                                                       all_dichotomous() ~ "categorical"),
-              missing = "no") %>% 
+                                                       all_dichotomous() ~ "categorical")) %>% 
   add_difference() 
 Tabla_GETNE_TAC
 ```
@@ -102,8 +118,7 @@ Tabla_inclinacion_SEPTO <- GETNE %>%
   select(Inclinacion_septo_ventricular, 
          Cardiopatia_carcinoide) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
-                                                       all_dichotomous() ~ "categorical"),
-              missing = "no") %>% 
+                                                       all_dichotomous() ~ "categorical")) %>% 
   add_p() 
 Tabla_inclinacion_SEPTO
 ```
@@ -119,13 +134,13 @@ En la siguientes tablas se incluye la comparación entre aquellos pacientes que 
 
 Tabla_GETNE_cardiopatia <- GETNE %>% 
   filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide, levels = c("Si", "No"))) %>% 
   select(HOSPITAL, Sexo, Edad, Estado_general, Cardiopatia_alDx, Localizacion_primario, Metastasis_hepaticas,
-         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Cromogranina_A_categ,
-         Cardiopatia_carcinoide, CX_VALVULAR,
-         Tratamiento_sistemico_recibido) %>% 
+         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Ki_67_dic, Grado_NET, Cromogranina_A_categ,
+         A5_HIAA, Cardiopatia_carcinoide, CX_VALVULAR,
+         Tratamiento_oncologico, Exitus_status, OS_years) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
-                                                       all_dichotomous() ~ "categorical"),
-              missing = "no") %>% 
+                                                       all_dichotomous() ~ "categorical")) %>% 
   add_p() 
 Tabla_GETNE_cardiopatia
 ```
@@ -137,11 +152,10 @@ Tabla_GETNE_cardiopatia
 Tabla_GETNE_TAC2 <- GETNE %>%
   filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
   mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide, levels = c("Si", "No"))) %>% 
-  select(Diametro_AD_TAC_BASAL, Diametro_AI_TAC_BASAL, Diametro_VD_TAC_BASAL, Diametro_VI_TAC_BASAL,
+  select(Edad, Diametro_AD_TAC_BASAL, Diametro_AI_TAC_BASAL, Diametro_VD_TAC_BASAL, Diametro_VI_TAC_BASAL,
          RATIO_AD_AI_TAC_BASAL, RATIO_VD_VI_TAC_BASAL, Cardiopatia_carcinoide) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
-                                                       all_dichotomous() ~ "categorical"),
-              missing = "no") %>% 
+                                                       all_dichotomous() ~ "categorical")) %>% 
   add_difference()
 Tabla_GETNE_TAC2
 ```
@@ -155,8 +169,7 @@ Tabla_GETNE_TAC_inclinacion <- GETNE %>%
   select(Inclinacion_septo_ventricular_TAC_BASAL, 
          Cardiopatia_carcinoide) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
-                                                       all_dichotomous() ~ "categorical"),
-              missing = "no") %>% 
+                                                       all_dichotomous() ~ "categorical")) %>% 
   add_p()
 Tabla_GETNE_TAC_inclinacion 
 ```
@@ -235,6 +248,52 @@ tbl_getne_controlsepto <- GETNE_wide_filter %>%
   add_p()
 tbl_getne_controlsepto
 
+```
+
+**Pacientes con cardiopatía: Dx_cardiopatía vs Basal**
+
+```{r}
+#| label: tbl-GETNE-DxCardiopatia-Control
+#| tbl-cap: Comparación de los diámetros de la CT cardiopatía Dx vs. Control
+
+CHD_dx_control <- GETNE_control %>%
+  drop_na(value) %>% 
+  mutate(moment = case_when(
+    Cardiopatia_alDx == "Si" & moment == "BASAL" ~ "Dx_Cardiopatia", 
+    TRUE ~ moment)) 
+
+GETNE_wide_dx_control <- CHD_dx_control %>% 
+  pivot_wider(names_from = Parameter, values_from = value) 
+
+Table_dx_CHD <- GETNE_wide_dx_control %>% 
+  filter(moment != "BASAL") %>% 
+  filter(Cardiopatia_carcinoide == "Si") %>% 
+  mutate(moment = factor(moment, levels = c("Dx_Cardiopatia", "CONTROL"))) %>% 
+  select(-Cardiopatia_alDx, -Cardiopatia_carcinoide) %>% 
+  tbl_summary(by = moment, include = -Numero_registro) %>% 
+  add_p(
+    test = list(all_continuous() ~ "paired.t.test"),
+    group = Numero_registro
+  )
+Table_dx_CHD
+```
+
+**Pacientes sin cardiopatía: Basal vs Control**
+
+```{r}
+#| label: tbl-GETNE-Basal-Control
+#| tbl-cap: Comparación de los diámetros de la CT Basal vs. Controlen aquellos pacientes que no desarrollaron CHD
+
+Table_dx_noCHD <- GETNE_wide_dx_control %>% 
+  filter(moment != "Dx_Cardiopatia") %>% 
+  filter(Cardiopatia_carcinoide == "No") %>% 
+  select(-Cardiopatia_alDx, -Cardiopatia_carcinoide) %>% 
+  tbl_summary(by = moment, include = -Numero_registro) %>% 
+  add_p(
+    test = list(all_continuous() ~ "paired.t.test"),
+    group = Numero_registro
+  )
+Table_dx_noCHD
 ```
 
 ### Figuras
@@ -375,6 +434,55 @@ ggboxplot(GETNE_wide_filter, x= "moment", y= "RATIO_VD_VI", add = "jitter")+
         axis.title = element_text(size = 18, face = "bold"),
         axis.text = element_text(size = 14))
 ```
+
+# Supervivencia
+
+El "overall survival" fue calculado tomando en cuenta la fecha de diagnóstico y la fecha de exitus o último seguimiento (15/09/26), como vemos no se llega a la media de supervivencia en el grupo non-CHD. 
+
+**Todos los pacientes**
+
+```{r}
+OS_todos <- survfit(
+  Surv(
+    OS_years, exitus) ~ Cardiopatia_carcinoide, 
+  data = GETNE)
+OS_todos
+```
+
+```{r}
+#| label: fig-survival-todos
+#| fig-cap: Supervivencia entre los pacientes con CHD vs non-CHD
+
+ggsurvplot(OS_todos, risk.table = TRUE, pval=TRUE, pval.method = TRUE, 
+           font.x = c(20, "bold"), font.y = c(20, "bold"), surv.scale = "percent",
+           surv.median.line = "hv", ylab = "Overall survival probability", xlab = "Time in years",
+           break.time.by = 5, palette = c("black", "red"), legend.labs = c("non-CHD", "CHD"))
+```
+
+**Quitando CHD al diagnóstico**
+
+```{r}
+GETNE_selection <- GETNE %>% 
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No")
+
+OS_selection <- survfit(
+  Surv(
+    OS_years, exitus) ~ Cardiopatia_carcinoide, 
+  data = GETNE_selection)
+OS_selection
+```
+
+
+```{r}
+#| label: fig-survival-excluyendo
+#| fig-cap: Supervivencia entre los pacientes con CHD vs non-CHD. Excluyendo aquellos que al diagnóstico de la enfermedad metastásica presentaron CHD
+
+ggsurvplot(OS_selection, risk.table = TRUE, pval=TRUE, pval.method = TRUE, 
+           font.x = c(20, "bold"), font.y = c(20, "bold"), surv.scale = "percent",
+           surv.median.line = "hv", ylab = "Overall survival probability", xlab = "Time in years",
+           break.time.by = 5, palette = c("black", "red"), legend.labs = c("non-CHD", "CHD"))
+```
+
 
 # Cutpoint: diagnóstico
 
