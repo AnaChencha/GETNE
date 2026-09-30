@@ -73,6 +73,7 @@ Tabla_GETNE_categorical <- GETNE %>%
          Tratamiento_oncologico, Exitus_status, OS_years) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
                                                        all_dichotomous() ~ "categorical")) %>% 
+  add_overall(last = FALSE) %>%
   add_p() 
 Tabla_GETNE_categorical
 ```
@@ -86,6 +87,7 @@ Tabla_sexoEdad <- GETNE %>%
   select(Cardiopatia_carcinoide, Sexo, Edad) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
                                                        all_dichotomous() ~ "categorical")) %>% 
+  add_overall(last = FALSE) %>%
   add_difference() 
 Tabla_sexoEdad 
 ```
@@ -106,6 +108,7 @@ Tabla_GETNE_TAC <- GETNE %>%
          RATIO_AD_AI_TAC_Cardiopatia, RATIO_VD_VI_TAC_Cardiopatia, Cardiopatia_carcinoide) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
                                                        all_dichotomous() ~ "categorical")) %>% 
+  add_overall(last = FALSE) %>%
   add_difference() 
 Tabla_GETNE_TAC
 ```
@@ -119,10 +122,43 @@ Tabla_inclinacion_SEPTO <- GETNE %>%
          Cardiopatia_carcinoide) %>% 
   tbl_summary(by = Cardiopatia_carcinoide, type = list(where(is.numeric) ~ "continuous",
                                                        all_dichotomous() ~ "categorical")) %>% 
+  add_overall(last = FALSE) %>%
   add_p() 
 Tabla_inclinacion_SEPTO
 ```
 
+## CHD group
+
+Considerando solo el grupo CHD. La siguiente tabla es una comparación de los que tenían CHD al diagnóstico y los que la desarrollaron después. 
+
+```{r}
+#| label: tbl-GETNE-CHDgroup
+#| tbl-cap: Parámetros clínicos en el grupo CHD, si al dianóstico vs. no 
+
+Tabla_GETNE_CHD <- GETNE %>% 
+  mutate(Cardiopatia_alDx = factor(Cardiopatia_alDx, levels = c("Si", "No"))) %>% 
+  select(HOSPITAL, Sexo, Edad, Estado_general, Cardiopatia_alDx, Localizacion_primario, Metastasis_hepaticas,
+         Metastasis_peritoneales, Metastasis_ganglionares, Ki_67, Ki_67_dic, Grado_NET, Cromogranina_A_categ, A5_HIAA, CX_VALVULAR,
+         Tratamiento_oncologico, Exitus_status, OS_years) %>% 
+  tbl_summary(by = Cardiopatia_alDx, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical")) %>% 
+  add_p() 
+Tabla_GETNE_CHD
+```
+
+```{r}
+#| label: tbl-GETNEgroup-parametrosCT
+#| tbl-cap: Parámetros TAC, comparación dentro del grupo CHD, si al diagnóstico vs. no
+
+Tabla_GETNE_CHD <- GETNE %>% 
+  mutate(Cardiopatia_alDx = factor(Cardiopatia_alDx, levels = c("Si", "No"))) %>% 
+  select(Diametro_AD_TAC_Cardiopatia, Diametro_AI_TAC_Cardiopatia, Diametro_VD_TAC_Cardiopatia, Diametro_VI_TAC_Cardiopatia,
+         RATIO_AD_AI_TAC_Cardiopatia, RATIO_VD_VI_TAC_Cardiopatia, Cardiopatia_alDx) %>% 
+  tbl_summary(by = Cardiopatia_alDx, type = list(where(is.numeric) ~ "continuous",
+                                                       all_dichotomous() ~ "categorical")) %>% 
+  add_difference() 
+Tabla_GETNE_CHD
+```
 
 ## Cardiopatia_postDX vs no cardiopatia
 
