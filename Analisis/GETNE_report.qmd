@@ -22,6 +22,7 @@ Elaborado por: Ana Elsa Huerta Hernández
 #| label: load-packages
 #| include: false
 
+library(logistf)
 library(readxl)
 library(tidyverse)
 library(ggplot2)
@@ -212,23 +213,93 @@ Tabla_GETNE_TAC_inclinacion
 
 ### Análisis multivariante
 
-Un poco en línea de lo que decía Maria, como se ve abajo, por análisis multivariante las dos variables que siguen apareciendo que pueden ser predictoras de cardiopatía son el Ventrículo izquierdo basal o el ratio VD_VI. En la regresión no es correcto incluir el dato del ventrículo y el ratio porque son variables relacionadas, por eso las he puesto por separado (modelo multivariante 1 con los diámetros y modelo multivariante 2 con los ratios). Para este análisis multivariante incluí la comparación de pacientes sin cardiopatía y pacientes que desarrollaron la cardiopatía a posteriori del diagnóstico y no fue detectada en el TAC basal. 
+```{r}
+#| label: firth-preparacion
+#| include: false
+
+GETNE_firth <- GETNE %>% 
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
+  mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide)) %>% 
+  drop_na(Diametro_VI_TAC_BASAL, Diametro_VD_TAC_BASAL,
+          RATIO_AD_AI_TAC_BASAL, RATIO_VD_VI_TAC_BASAL)
+
+# Función para extraer OR, IC 95% (verosimilitud perfilada) y p-valor de un modelo logistf
+tabla_or_firth <- function(modelo, etiquetas) {
+  ic <- confint(modelo)
+  tibble(
+    Variable = etiquetas,
+    OR = exp(coef(modelo))[-1],
+    IC_inf = exp(ic[-1, 1]),
+    IC_sup = exp(ic[-1, 2]),
+    p = modelo$prob[-1]
+  ) %>% 
+    mutate(`OR (IC 95%)` = sprintf("%.2f (%.2f-%.2f)", OR, IC_inf, IC_sup),
+           `p-valor` = ifelse(p < 0.001, "<0.001", sprintf("%.3f", p))) %>% 
+    select(Variable, `OR (IC 95%)`, `p-valor`)
+}
+
+# Modelo 1: diámetros (OR por cada 1 mm)
+Multivariante_firth <- logistf(Cardiopatia_carcinoide ~ Diametro_VI_TAC_BASAL + Diametro_VD_TAC_BASAL,
+                               data = GETNE_firth)
+
+# Modelo 2: ratios multiplicados por 10 (OR por cada aumento de 0.1 unidades)
+Multivariante_firth_2 <- logistf(Cardiopatia_carcinoide ~ I(RATIO_AD_AI_TAC_BASAL*10) + I(RATIO_VD_VI_TAC_BASAL*10),
+                                 data = GETNE_firth)
+
+# Modelo 2 sin re-escalar, solo para mostrar en el texto el OR por 1 unidad
+Multivariante_firth_2_sin_escalar <- logistf(Cardiopatia_carcinoide ~ RATIO_AD_AI_TAC_BASAL + RATIO_VD_VI_TAC_BASAL,
+                                             data = GETNE_firth)
+```
+
+Para el análisis multivariante se compararon los pacientes sin cardiopatía (grupo de referencia) con los pacientes que desarrollaron la cardiopatía con posterioridad al diagnóstico (cardiopatía metacrónica, m-CHD), es decir, aquellos en los que no estaba presente en el TAC basal. Se excluyeron los pacientes con cardiopatía sincrónica, porque en ellos el TAC basal ya refleja la enfermedad establecida.
+
+Se ajustaron dos modelos por separado, ya que los diámetros y los ratios derivados de ellos son variables relacionadas y no deben incluirse a la vez en el mismo modelo:
+
+- **Modelo 1**: diámetro del VI y diámetro del VD en el TAC basal (OR por cada 1 mm).
+- **Modelo 2**: ratio AD:AI y ratio VD:VI en el TAC basal (OR por cada aumento de 0.1 unidades).
+
+#### Por qué regresión de Firth
+
+En lugar de la regresión logística convencional (máxima verosimilitud, `glm`) se utilizó la **regresión logística penalizada de Firth** (paquete `logistf`), por los siguientes motivos:
+
+- **Tamaño muestral pequeño y pocos eventos.** El análisis incluye `r nrow(GETNE_firth)` pacientes, de los cuales solo `r sum(GETNE_firth$Cardiopatia_carcinoide == "Si")` tienen cardiopatía, lo que da unos `r round(sum(GETNE_firth$Cardiopatia_carcinoide == "Si") / 2)` eventos por variable en cada modelo de dos predictores. Es muy por debajo de la regla habitual de 10 eventos por variable. En estas condiciones, los coeficientes de la regresión logística convencional están sesgados y tienden a sobreestimar la magnitud de los OR.
+- **Corrección del sesgo.** El método de Firth añade una penalización a la verosimilitud que reduce ese sesgo de muestras pequeñas y acerca los coeficientes hacia cero, dando estimaciones más conservadoras.
+- **Estabilidad ante separación.** Con pocos eventos es frecuente la separación completa o casi completa, en la que la regresión convencional no converge o da OR e intervalos infinitos. Firth siempre produce estimaciones finitas.
+- **Intervalos más fiables.** Los IC 95% y los p-valores se calculan por verosimilitud perfilada penalizada, que es más adecuada que la aproximación de Wald cuando la muestra es pequeña. Por eso los intervalos pueden ser asimétricos.
+
+#### Por qué se re-escalan los ratios
+
+El OR de una regresión logística expresa el cambio por cada aumento de **1 unidad** de la variable. Los ratios AD:AI y VD:VI se mueven en un rango muy estrecho (en esta muestra, el ratio VD:VI va de `r min(GETNE_firth$RATIO_VD_VI_TAC_BASAL)` a `r max(GETNE_firth$RATIO_VD_VI_TAC_BASAL)`), de modo que un aumento de 1 unidad supera todo el rango observado y produce OR muy grandes, sin interpretación clínica (OR de `r round(exp(coef(Multivariante_firth_2_sin_escalar))[3])` para el ratio VD:VI). Por eso los ratios se multiplican por 10 y el OR se expresa **por cada aumento de 0.1 unidades**. Es exactamente el mismo modelo: los p-valores no cambian, solo la unidad en la que se lee el OR.
+
+No se usó una transformación logarítmica del tipo `log(x + 1)`. Esa transformación está pensada para variables con ceros y muy asimétricas, que no es el caso de los ratios, y además comprimiría todavía más la escala, haciendo el OR aún mayor.
 
 ```{r}
+#| label: tbl-firth-modelo1
+#| tbl-cap: "Modelo 1. Regresión logística de Firth con los diámetros del TAC basal (OR por cada 1 mm). Referencia: pacientes sin cardiopatía; se excluye la cardiopatía sincrónica."
+
+tabla_or_firth(Multivariante_firth, c("Diámetro VI (mm)", "Diámetro VD (mm)")) %>% 
+  knitr::kable(align = "lcc")
+```
+
+```{r}
+#| label: tbl-firth-modelo2
+#| tbl-cap: "Modelo 2. Regresión logística de Firth con los ratios del TAC basal (OR por cada aumento de 0.1 unidades). Referencia: pacientes sin cardiopatía; se excluye la cardiopatía sincrónica."
+
+tabla_or_firth(Multivariante_firth_2, c("Ratio AD:AI (por 0.1)", "Ratio VD:VI (por 0.1)")) %>% 
+  knitr::kable(align = "lcc")
+```
+
+En el **Modelo 1**, un menor diámetro del VI basal se asocia de forma independiente con el desarrollo posterior de cardiopatía (OR `r sprintf("%.2f", exp(coef(Multivariante_firth))[2])` por cada mm), mientras que el diámetro del VD no alcanza significación. En el **Modelo 2**, cada aumento de 0.1 en el ratio VD:VI basal casi duplica la odds de desarrollar cardiopatía (OR `r sprintf("%.2f", exp(coef(Multivariante_firth_2))[3])`), sin asociación significativa para el ratio AD:AI. Los intervalos de confianza son amplios, lo que refleja el pequeño número de eventos, y estos resultados deben considerarse exploratorios.
+
+```{r}
+#| label: GETNE-filter
+#| include: false
+
+# Se mantiene GETNE_filter porque lo usan los apartados posteriores (cutpoint y score combinado)
 GETNE_filter <- GETNE %>% 
   filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "No") %>% 
   mutate(Cardiopatia_carcinoide = factor(Cardiopatia_carcinoide),
          Inclinacion_septo_ventricular_TAC_BASAL = factor(Inclinacion_septo_ventricular_TAC_BASAL))
-
-Multivariante1 <- glm(Cardiopatia_carcinoide ~ Diametro_VI_TAC_BASAL + Diametro_VD_TAC_BASAL, data = GETNE_filter, family = "binomial")
-
-summary(Multivariante1)
-```
-
-```{r}
-Multivariante2 <- glm(Cardiopatia_carcinoide ~ RATIO_AD_AI_TAC_BASAL + RATIO_VD_VI_TAC_BASAL, data = GETNE_filter, family = "binomial")
-
-summary(Multivariante2)
 ```
 
 
