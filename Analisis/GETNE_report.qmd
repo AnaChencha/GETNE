@@ -560,13 +560,16 @@ OS_todos
 #| label: fig-survival-todos
 #| fig-cap: Supervivencia entre los pacientes con CHD vs non-CHD
 
-ggsurvplot(OS_todos, risk.table = TRUE, pval=TRUE, pval.method = TRUE, 
+ggsurvplot(OS_todos, risk.table = TRUE, pval=TRUE, pval.method = TRUE, pval.size = 6,
            font.x = c(20, "bold"), font.y = c(20, "bold"), surv.scale = "percent",
-           surv.median.line = "hv", ylab = "Overall survival probability", xlab = "Time in years",
-           break.time.by = 5, palette = c("black", "red"), legend.labs = c("non-CHD", "CHD"))
+           font.tickslab = 20, fontsize = 6, font.legend = list(size = 14),
+           risk.table.y.text.col = TRUE, risk.table.y.text = FALSE,
+           legend.title = element_blank(),
+           surv.median.line = "hv", ylab = "OS probability", xlab = "Time in years",
+           break.time.by = 5, palette = c("black", "red"), legend.labs = c("Control", "CHD"))
 ```
 
-**Quitando CHD al diagnóstico**
+**Quitando CHD al diagnóstico: Control vs mCHD**
 
 ```{r}
 GETNE_selection <- GETNE %>% 
@@ -581,13 +584,97 @@ OS_selection
 
 
 ```{r}
-#| label: fig-survival-excluyendo
-#| fig-cap: Supervivencia entre los pacientes con CHD vs non-CHD. Excluyendo aquellos que al diagnóstico de la enfermedad metastásica presentaron CHD
+#| label: fig-survival-mCHD
+#| fig-cap: Supervivencia entre los pacientes con mCHD vs non-CHD. Excluyendo aquellos que al diagnóstico de la enfermedad metastásica presentaron CHD
 
-ggsurvplot(OS_selection, risk.table = TRUE, pval=TRUE, pval.method = TRUE, 
+ggsurvplot(OS_selection, risk.table = TRUE, pval=TRUE, pval.method = TRUE, pval.size = 6, 
            font.x = c(20, "bold"), font.y = c(20, "bold"), surv.scale = "percent",
-           surv.median.line = "hv", ylab = "Overall survival probability", xlab = "Time in years",
-           break.time.by = 5, palette = c("black", "red"), legend.labs = c("non-CHD", "CHD"))
+           font.tickslab = 20, fontsize = 6, font.legend = list(size = 14),
+           risk.table.y.text.col = TRUE, risk.table.y.text = FALSE,
+           legend.title = element_blank(),
+           surv.median.line = "hv", ylab = "OS probability", xlab = "Time in years",
+           break.time.by = 5, palette = c("black", "orange"), legend.labs = c("Control", "mCHD"))
+```
+
+
+**Control vs sCHD (que la desarrollaron junto con la enfermedad metastásica**
+
+```{r}
+GETNE_selection_2 <- GETNE %>% 
+  filter(Cardiopatia_carcinoide == "No" | Cardiopatia_alDx == "Si")
+
+OS_selection_2 <- survfit(
+  Surv(
+    OS_years, exitus) ~ Cardiopatia_carcinoide, 
+  data = GETNE_selection_2)
+OS_selection_2
+```
+
+
+```{r}
+#| label: fig-survival-sCHD
+#| fig-cap: Supervivencia entre los pacientes con sCHD vs non-CHD. En comparación con aquellos que debutaron enfermedad metastásica con el diagnóstico de CHD
+
+ggsurvplot(OS_selection_2, risk.table = TRUE, pval=TRUE, pval.method = TRUE, pval.size = 6, 
+           font.x = c(20, "bold"), font.y = c(20, "bold"), surv.scale = "percent",
+           font.tickslab = 20, fontsize = 6, font.legend = list(size = 14),
+           risk.table.y.text.col = TRUE, risk.table.y.text = FALSE,
+           legend.title = element_blank(),
+           surv.median.line = "hv", ylab = "OS probability", xlab = "Time in years",
+           break.time.by = 5, palette = c("black", "chocolate"), legend.labs = c("Control", "sCHD"))
+```
+
+**sCHD vs mCHD**
+
+```{r}
+GETNE_selection_3 <- GETNE %>% 
+  filter(Cardiopatia_carcinoide == "Si")
+
+OS_selection_3 <- survfit(
+  Surv(
+    OS_years, exitus) ~ Cardiopatia_alDx, 
+  data = GETNE_selection_3)
+OS_selection_3
+```
+
+```{r}
+#| label: fig-survival-sCHD-mCHD
+#| fig-cap: Supervivencia entre los pacientes con CHD ya sea sCHD o mCHD
+
+ggsurvplot(OS_selection_3, risk.table = TRUE, pval=TRUE, pval.method = TRUE, pval.size = 6, 
+           font.x = c(20, "bold"), font.y = c(20, "bold"), surv.scale = "percent",
+           font.tickslab = 20, fontsize = 6, font.legend = list(size = 14),
+           risk.table.y.text.col = TRUE, risk.table.y.text = FALSE,
+           legend.title = element_blank(),
+           surv.median.line = "hv", ylab = "OS probability", xlab = "Time in years",
+           break.time.by = 5, palette = c("orange", "chocolate"), legend.labs = c("mCHD", "sCHD"))
+```
+
+
+**Medianas de seguimiento en cada grupo**
+
+```{r}
+GETNE_FU <- GETNE %>%
+  drop_na(OS_years) %>%
+  mutate(Grupo_FU = case_when(
+    Cardiopatia_carcinoide == "No" ~ "Control",
+    Cardiopatia_alDx == "No" ~ "mCHD",
+    Cardiopatia_alDx == "Si" ~ "sCHD"))
+
+# Cohorte completa: 7 años (IC 95%, 6-10)
+FU_todos <- survfit(Surv(OS_years, 1 - exitus) ~ 1, data = GETNE_FU)
+FU_todos
+
+# Por subgrupo: Control 7 años, mCHD 10 años, sCHD 3.5 años
+FU_grupos <- survfit(Surv(OS_years, 1 - exitus) ~ Grupo_FU, data = GETNE_FU)
+FU_grupos
+
+# Rango observado (mín-máx) por subgrupo
+GETNE_FU %>%
+  group_by(Grupo_FU) %>%
+  summarize(n = n(),
+            min = min(OS_years),
+            max = max(OS_years))
 ```
 
 
